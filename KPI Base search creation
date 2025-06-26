@@ -128,3 +128,20 @@ If you're using an entity-centric model, tie KPIs to entities like GSC-Portal or
 
 Adjust timechart spans and thresholds as needed based on real-time data availability.
 
+########################################################################################################################
+
+index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" (status=1 OR status=0)
+| eval error_hits = if(status = 1, 1, 0) 
+| stats sum(ok_hits) as ok_hits, sum(critical_hits) as crit_hits, sum(minor_hits) as minor_hits, sum(error_hits) as error_count by _time, transaction_name, location_name 
+| eval total_hits = ok_hits + crit_hits + minor_hits + error_count 
+| eval availability = round(((total_hits - error_count) / total_hits) * 100, 2)
+| stats avg(availability) as Avg_Availability, sum(total_hits) as Transactions, sum(error_count) as Total_Errors by transaction_name, location_name 
+| search location_name IN ("*") AND transaction_name IN ("*") 
+| appendpipe 
+    [ stats sum(Transactions) as Application_Total_Transactions, sum(Total_Errors) as Application_Total_Errors 
+    | eval transaction_name="Application Overall Availability" 
+    | eval Application_Availability = round(((Application_Total_Transactions - Application_Total_Errors) / Application_Total_Transactions) * 100, 2)] 
+| eval Avg_Availability = round(Avg_Availability, 2) 
+| eval Avg_Availability = Avg_Availability . "%", Application_Availability = Application_Availability . "%" 
+| table transaction_name, Application_Availability, Application_Total_Errors, Application_Total_Transactions, location_name, Avg_Availability, Transactions, Total_Errors 
+| sort - Application_Availability
