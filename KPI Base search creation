@@ -1,0 +1,130 @@
+High-Level Approach
+We will create KPI base searches and KPI thresholds for each scenario, group them under a service, and configure Notable Event Aggregation Policies (NEAP) to generate episodes based on the triggered KPIs.
+
+✅ Alert Requirements Breakdown
+1. Application: GSC Portal
+Transaction names:
+
+GSC-Portal
+
+GSC - whoami
+
+Criteria:
+
+The average availability (%) of both transactions combined is < 50% over the past 15 minutes.
+
+2. Application: GS6_Portal
+Transaction names:
+
+GSC -Dashboard ERIAD
+
+GSC-Dashboard_JIMPQ
+
+Criteria:
+
+If either transaction has availability < 100% over the past 10 minutes.
+
+🛠️ Step-by-Step Configuration
+🔹 Step 1: Create KPI Base Searches
+📌 KPI 1: GSC Portal Combined Availability
+Name: GSC_Portal_Combined_Availability
+
+spl
+Copy
+Edit
+index=topaz sourcetype="topaziavailability" application_name="GSC Portal" 
+(transaction_name="GSC-Portal" OR transaction_name="GSC - whoami") 
+(status=1 OR status=0)
+| eval avail=if(status=1,1,0)
+| timechart span=1m avg(avail) as availability by transaction_name
+| eval combined_avg=if(isnull('GSC-Portal'),0,'GSC-Portal') + if(isnull('GSC - whoami'),0,'GSC - whoami') / 2
+| fields _time, combined_avg
+
+index=topaz sourcetype="topaziavailability" application_name="GSC Portal" 
+(transaction_name="GSC-Portal" OR transaction_name="GSC - whoami") 
+(status=1 OR status=0)
+| eval avail=if(status=1,1,0)
+| timechart span=1m avg(avail) as availability by transaction_name
+| eval combined_avg=if(isnull('GSC-Portal'),0,'GSC-Portal') + if(isnull('GSC - whoami'),0,'GSC - whoami') / 2
+| fields _time, combined_avg
+
+
+
+
+
+KPI Value Field: combined_avg
+
+KPI Threshold:
+
+Critical: < 50
+
+Time Window: 15 minutes
+
+Schedule: Every minute
+
+📌 KPI 2: GS6_Portal - Dashboard ERIAD
+Name: GS6_Dashboard_ERIAD_Availability
+
+spl
+Copy
+Edit
+index=topaz sourcetype="topaziavailability" application_name="GS6_Portal" 
+transaction_name="GSC -Dashboard ERIAD" (status=1 OR status=0)
+| eval avail=if(status=1,1,0)
+| timechart span=1m avg(avail)*100 as availability
+KPI Threshold:
+
+Critical: < 100
+
+Time Window: 10 minutes
+
+📌 KPI 3: GS6_Portal - Dashboard JIMPQ
+Name: GS6_Dashboard_JIMPQ_Availability
+
+spl
+Copy
+Edit
+index=topaz sourcetype="topaziavailability" application_name="GS6_Portal" 
+transaction_name="GSC-Dashboard_JIMPQ" (status=1 OR status=0)
+| eval avail=if(status=1,1,0)
+| timechart span=1m avg(avail)*100 as availability
+KPI Threshold:
+
+Critical: < 100
+
+Time Window: 10 minutes
+
+🔹 Step 2: Create a Service
+Service Name: Topaz Availability Monitoring
+
+Add all 3 KPIs to this service.
+
+Assign appropriate entity rules if necessary (or mark as aggregate KPIs if not tied to specific entities).
+
+🔹 Step 3: Configure Notable Event Aggregation Policy (NEAP)
+Title: Topaz Application Episode
+
+Aggregation Rules:
+
+Group by: Service = Topaz Availability Monitoring
+
+Split by: None (unless you want separate episodes per application)
+
+Trigger Condition:
+
+When 1 or more KPIs breach Critical threshold.
+
+🔹 Step 4: Alert/Episode Notification
+You can optionally:
+
+Send alert via email, Slack, or ServiceNow integration.
+
+Tag episode with Application=GSC Portal or GS6_Portal.
+
+🧪 Final Notes
+Ensure status=1 (up), status=0 (down) is normalized and reliable.
+
+If you're using an entity-centric model, tie KPIs to entities like GSC-Portal or GSC -Dashboard JIMPQ.
+
+Adjust timechart spans and thresholds as needed based on real-time data availability.
+
