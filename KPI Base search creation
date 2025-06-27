@@ -145,3 +145,16 @@ index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" (statu
 | eval Avg_Availability = Avg_Availability . "%", Application_Availability = Application_Availability . "%" 
 | table transaction_name, Application_Availability, Application_Total_Errors, Application_Total_Transactions, location_name, Avg_Availability, Transactions, Total_Errors 
 | sort - Application_Availability
+
+
+################################################################################################################################
+Updated Search:
+index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+(transaction_name="GSC-Portal" OR transaction_name="GSC - whoami") (status=1 OR status=0)
+| eval error_hit = if(status == 0, 1, 0), ok_hit = if(status == 1, 1, 0)
+| stats sum(ok_hit) as ok_hits, sum(error_hit) as error_count by _time, transaction_name
+| eval total_hits = ok_hits + error_count
+| eval availability = round(((total_hits - error_count) / total_hits) * 100, 2)
+| timechart span=1m avg(availability) as availability by transaction_name
+| eval combined_avg = round((coalesce('GSC-Portal', 0) + coalesce('GSC - whoami', 0)) / 2, 2)
+| fields _time, combined_avg
