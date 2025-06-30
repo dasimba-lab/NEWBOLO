@@ -1,0 +1,49 @@
+Please create an ITSI alert to generate an episode based on the following Topaz transaction:
+
+index=topaz sourcetype="topaz:availability" application_name="$" transaction_name="$" (status=1 OR status=0)
+
+
+Application Name: GSC_Portal
+Transaction names:
+
+
+        
+      
+ GSC-Portal   
+        Task actions
+           
+      Convert to child item
+     Delete 
+
+        
+      
+ GSC-whoami   
+        Task actions
+           
+      Convert to child item
+     Delete 
+
+Criteria: if average of BOTH transactions combined Avail % less than 50% over the past 15 minutes
+Application Name: GSC_Portal
+Transaction names:
+
+
+        
+      
+ GSC-Dashboard_ERIAD   
+        Task actions
+           
+      Convert to child item
+     Delete 
+
+        
+      
+ GSC-Dashboard_TIMPO   
+        Task actions
+           
+      Convert to child item
+     Delete 
+
+Criteria: Avail % less than 100% over the past 10 minutes.
+Topaz Availability Dashboard for transaction references:
+https://splunk.health.mil/en-US/app/DHA-Enterprise-Resources/topaz_application_availability?
