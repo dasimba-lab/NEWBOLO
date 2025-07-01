@@ -131,3 +131,13 @@ index=topaz sourcetype="topaz:availability" application_name="GSC_Portal"
     | where avg_dashboard_avail < 100
 ]
 | stats count by alert_type
+
+##################################################################################################################################################################
+index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" transaction_name IN ("GSC-Portal", "GSC-Dashboard_ERIAD") (status=1 OR status=0)
+| eval error_hits = if(status = 1, 1, 0)
+| stats sum(ok_hits) as ok_hits, sum(critical_hits) as crit_hits, sum(minor_hits) as minor_hits, sum(error_hits) as error_count by transaction_name
+| eval total_hits = ok_hits + crit_hits + minor_hits + error_count
+| eval availability = round((total_hits - error_count) / total_hits * 100, 2)
+| stats avg(availability) as Avg_Availability, sum(total_hits) as Total_Transactions, sum(error_count) as Total_Errors
+| where Avg_Availability < 50
+
