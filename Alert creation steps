@@ -1,0 +1,57 @@
+To create an ITSI (IT Service Intelligence) alert that generates an episode based on the specified Topaz transaction criteria, you can follow the steps below. This assumes you are familiar with Splunk's ITSI and SPL (Search Processing Language). 
+### Step 1: Define the Search Query
+You need to define a search query that meets your criteria. Below is an SPL query that encapsulates your requirements based on the provided events.
+#### SPL Query
+spl
+index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+(transaction_name="GSC-Portal" OR transaction_name="GSC-whoami") 
+(status=1 OR status=0)
+| stats avg(Avail) as avg_avail by application_name, transaction_name, _time
+| eval period=timechart_window(15m) 
+| stats avg(avg_avail) as combined_avg_avail 
+| where combined_avg_avail < 50
+
+### Step 2: Define the Second Alert for Dashboard Transactions
+For the GSC-Dashboard_ERIAD and GSC-Dashboard_TIMPO transactions:
+spl
+index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+(transaction_name="GSC-Dashboard_ERIAD" OR transaction_name="GSC-Dashboard_TIMPO") 
+(status=1 OR status=0)
+| stats avg(Avail) as avg_avail by application_name, transaction_name, _time
+| eval period=timechart_window(10m) 
+| where avg_avail < 100
+
+### Step 3: Combine Alerts into a Single ITSI Alert
+Combine both conditions into a single alert (if appropriate), and set up the conditions to generate an episode:
+spl
+| append [ search index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+(transaction_name="GSC-Portal" OR transaction_name="GSC-whoami") 
+(status=1 OR status=0)
+| stats avg(Avail) as avg_avail by application_name, transaction_name, _time
+| eval period=timechart_window(15m) 
+| stats avg(avg_avail) as combined_avg_avail 
+| where combined_avg_avail < 50 ]
+| append [ search index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+(transaction_name="GSC-Dashboard_ERIAD" OR transaction_name="GSC-Dashboard_TIMPO") 
+(status=1 OR status=0)
+| stats avg(Avail) as avg_avail by application_name, transaction_name, _time
+| eval period=timechart_window(10m) 
+| where avg_avail < 100 ]
+| stats count by application_name
+
+### Step 4: Create the ITSI Alert
+1. *Navigate to ITSI*: Go to the Splunk ITSI application.
+2. *Create New Alert*:
+   - Go to "Configuration," then "Alerts."
+   - Click on "Create New Alert."
+3. *Define Alert Criteria*:
+   - Name your alert (e.g., "GSC_Portal Availability Alert").
+   - Add a description and set the search type to "Real-time" or "Scheduled" depending on your monitoring needs.
+   - Paste the combined SPL query defined above.
+   - Set the alert condition (e.g., "If the search returns more than 0 results").
+4. *Episode Generation*:
+   - Enable episode generation based on alert triggers.
+   - Configure additional fields as needed (e.g., severity or importance) based on your IT service management processes.
+5. *Set Alert Actions*: Decide what actions should be taken when this alert triggers (e.g., send email notifications, trigger scripts, etc.).
+### Conclusion
+This ITSI alert will generate an episode if the average availability percentage for the specified transactions in the "GSC_Portal" application falls below the thresholds you've set within the defined time frames. Adjust the queries according to your environment and ensure that any necessary permissions are in place for the queries to run successfully.
