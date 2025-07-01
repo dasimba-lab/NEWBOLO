@@ -141,3 +141,24 @@ index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" transa
 | stats avg(availability) as Avg_Availability, sum(total_hits) as Total_Transactions, sum(error_count) as Total_Errors
 | where Avg_Availability < 50
 
+##############################################################################################################################################################
+spl
+index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+(transaction_name IN ("GSC-Dashboard_Portal", "GSC-Dashboard_Whoami") 
+OR transaction_name IN ("GSC-Dashboard_ERIAD-Check", "GSC-Dashboard_TIMPO-Check"))
+(status=1 OR status=0)
+| eval error_hits = if(status = 1, 1, 0)
+| eval total_hits = ok_hits + critical_hits + minor_hits + error_hits
+| eval availability = round(((total_hits - error_hits) / total_hits) * 100, 2)
+| stats avg(availability) as Avg_Availability, 
+         sum(total_hits) as Total_Transactions, 
+         sum(error_hits) as Total_Errors 
+         by transaction_name, location_name, _time
+| timechart span=15m avg(Avg_Availability) as avg_transaction_avail 
+| eval alert_type = case(
+    transaction_name IN ("GSC-Dashboard_Portal", "GSC-Dashboard_Whoami"), "GSC_Portal",
+    transaction_name IN ("GSC-Dashboard_ERIAD-Check", "GSC-Dashboard_TIMPO-Check"), "GSC_Dashboard"
+)
+| where avg_transaction_avail < 50
+
+
