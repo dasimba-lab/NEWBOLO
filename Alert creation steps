@@ -55,3 +55,59 @@ spl
 5. *Set Alert Actions*: Decide what actions should be taken when this alert triggers (e.g., send email notifications, trigger scripts, etc.).
 ### Conclusion
 This ITSI alert will generate an episode if the average availability percentage for the specified transactions in the "GSC_Portal" application falls below the thresholds you've set within the defined time frames. Adjust the queries according to your environment and ensure that any necessary permissions are in place for the queries to run successfully.
+
+##################################################################################################################################################################################################
+
+Certainly! Below are the adjusted SPL queries for both searches mentioned in your initial request. I have modified both searches to correctly evaluate the average availability for the specified transactions.
+### Search 1: GSC-Portal Transactions
+This query checks for the average availability of GSC-Portal and GSC-whoami transactions, generating an alert if the combined availability drops below 50% over the last 15 minutes.
+spl
+index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+(transaction_name="GSC-Portal" OR transaction_name="GSC-whoami") 
+(status=1 OR status=0)
+| timechart span=15m avg(Avail) as avg_avail
+| stats avg(avg_avail) as combined_avg_avail
+| where combined_avg_avail < 50
+
+### Explanation of Search 1:
+1. **Using timechart**: This calculates the average availability every 15 minutes.
+2. **Inner stats command**: Aggregates the average availability across the two transactions.
+3. *Condition*: Filters for cases where the combined average availability is less than 50%.
+---
+### Search 2: GSC-Dashboard Transactions
+This query checks for the average availability of GSC-Dashboard_ERIAD and GSC-Dashboard_TIMPO transactions, generating an alert if the availability drops below 100% over the last 10 minutes.
+spl
+index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+(transaction_name="GSC-Dashboard_ERIAD" OR transaction_name="GSC-Dashboard_TIMPO") 
+(status=1 OR status=0)
+| timechart span=10m avg(Avail) as avg_avail
+| where avg_avail < 100
+
+### Explanation of Search 2:
+1. **Using timechart**: This again calculates the average availability every 10 minutes.
+2. *Condition*: Filters for cases where the average availability is less than 100%.
+---
+### Combining Both Searches into a Single ITSI Alert
+You might want to create a combined alert that takes into consideration both the GSC-Portal and GSC-Dashboard alerts, which can be structured as follows:
+spl
+| append [
+    search index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+    (transaction_name="GSC-Portal" OR transaction_name="GSC-whoami") 
+    (status=1 OR status=0)
+    | timechart span=15m avg(Avail) as avg_avail
+    | stats avg(avg_avail) as combined_avg_avail
+    | where combined_avg_avail < 50
+]
+| append [
+    search index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+    (transaction_name="GSC-Dashboard_ERIAD" OR transaction_name="GSC-Dashboard_TIMPO") 
+    (status=1 OR status=0)
+    | timechart span=10m avg(Avail) as avg_avail
+    | where avg_avail < 100
+]
+| stats count by application_name
+
+### Explanation of the Combined Query:
+1. *Append Searches*: This creates a union of the results from both search queries.
+2. *Final Statistics*: This counts occurrences that meet the specified conditions for further processing, alert generation, or episode creation in ITSI.
+You can run any of these queries in your Splunk environment, and they should work without syntax errors while delivering the intended results. If you need any further modifications or explanations, just let me know!
