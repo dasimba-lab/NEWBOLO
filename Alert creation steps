@@ -111,3 +111,23 @@ spl
 1. *Append Searches*: This creates a union of the results from both search queries.
 2. *Final Statistics*: This counts occurrences that meet the specified conditions for further processing, alert generation, or episode creation in ITSI.
 You can run any of these queries in your Splunk environment, and they should work without syntax errors while delivering the intended results. If you need any further modifications or explanations, just let me know!
+
+
+
+
+#################################################################################################################################################################
+index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+(transaction_name="GSC-Portal" OR transaction_name="GSC-whoami") 
+(status=1 OR status=0)
+| timechart span=15m avg(Avail) as avg_portal_avail
+| eval alert_type="GSC_Portal"
+| where avg_portal_avail < 50
+| append [
+    search index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+    (transaction_name="GSC-Dashboard_ERIAD" OR transaction_name="GSC-Dashboard_TIMPO") 
+    (status=1 OR status=0)
+    | timechart span=10m avg(Avail) as avg_dashboard_avail
+    | eval alert_type="GSC_Dashboard"
+    | where avg_dashboard_avail < 100
+]
+| stats count by alert_type
