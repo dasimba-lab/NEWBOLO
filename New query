@@ -1,0 +1,22 @@
+spl
+(index=topaz sourcetype="topazavailability" application_name="GSC_Portal" 
+transaction_name IN ("GSC-Dashboard_Portal", "GSC-Dashboard_Whoami") 
+(status=1 OR status=0) 
+earliest=-15m latest=now)
+| eval error_hits = if(status = 1, 1, 0)
+| eval total_hits = ok_hits + critical_hits + minor_hits + error_hits
+| eval availability = round(((total_hits - error_hits) / total_hits) * 100, 2)
+| eval availability = if(transaction_name == "GSC-Dashboard_Portal", 0, availability)
+| stats avg(availability) as avg_availability by application_name
+| where avg_availability < 50
+| append [
+    (index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" 
+    (transaction_name="GSC-Dashboard_ERIAD-Check" OR transaction_name="GSC-Dashboard_TIMPO-Check") 
+    (status=1 OR status=0) 
+    earliest=-10m latest=now)
+    | eval error_hits = if(status = 1, 1, 0)
+    | eval total_hits = ok_hits + critical_hits + minor_hits + error_hits
+    | eval availability = round(((total_hits - error_hits) / total_hits) * 100, 2)
+    | stats avg(availability) as Avg_Availability by transaction_name
+    | where Avg_Availability < 100
+]
