@@ -112,3 +112,70 @@ If error_type is "shutdown" → status = 3
 If error_type is "reboot" or "57019" → status = 2
 
 Otherwise (default) → status = 1
+##########################################################################################################################
+index=database)
+OR (index=custom sourcetype = informatica:node_log) (utinip72 OR utinip73 OR usatixn OR usatix7a OR usatix6z OR usatix5г)
+leval d_availability=if(isnotnulldatabase_name) AND tenantname="usatix8q.dhss.csd.disa.mil" OR isnotnull (dbnode), 2,1)
+
+❗ What’s Wrong:
+Syntax Errors:
+
+index=database) has an unmatched parenthesis.
+
+leval is a typo. It should be | eval.
+
+isnotnulldatabase_name is invalid. Should be isnotnull(database_name).
+
+Incorrect use of logical operators (AND, OR) without parentheses.
+
+The Russian letter г in usatix5г is probably a typo — maybe you meant usatix5r.
+
+if(condition1 AND condition2 OR condition3, 2, 1) logic is ambiguous without parentheses.
+
+Logical Issues:
+
+Conditions in the if() statement are malformed and confusing.
+
+Misuse of field and function syntax.
+
+Corrected Version:
+
+(index=database OR index=custom) (sourcetype="informatica:node_log" OR sourcetype="oracle:listener:text")
+| search utinip72 OR utinip73 OR usatixn OR usatix7a OR usatix6z OR usatix5r
+| eval d_availability = if(
+    isnotnull(database_name) AND tenantname=="usatix8q.dhss.csd.disa.mil" OR isnotnull(dbnode),
+    2,
+    1
+)
+
+
+ Even Better with Proper Parentheses for Logic Clarity:
+
+spl
+Copy
+Edit
+| eval d_availability = if(
+    (isnotnull(database_name) AND tenantname=="usatix8q.dhss.csd.disa.mil") OR isnotnull(dbnode),
+    2,
+    1
+)
+✅ What This Fixed Search Does:
+Search Scope:
+
+Searches the database or custom index.
+
+Filters to sourcetypes of interest (informatica:node_log or others, if you adjust).
+
+Looks for events containing specific hostnames or system IDs (e.g., utinip72, usatix7a, etc.).
+
+Calculates a new field d_availability:
+
+Assigns a value of 2 if:
+
+database_name is present AND tenantname is "usatix8q.dhss.csd.disa.mil", OR
+
+dbnode is present.
+
+Otherwise assigns 1.
+
+✅ This likely reflects availability or health scoring logic for specific database nodes or tenants.
