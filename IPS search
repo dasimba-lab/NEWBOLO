@@ -1,0 +1,38 @@
+| basesearch name="IC# reboot and shutdown status"
+| append [
+    search index=database OR index=custom sourcetype=informatica:node_log 
+    (host=utinip72 OR host=utinip73 OR host=ugatix5n OR host=usayix7a OR host=usi8tix6z OR host=uswtix5r)
+]
+| stats max(Alert_Errors) as entity_value by abnode, _time
+| timechart span=15m max(entity_value) as aggregate_value by abnode
+| fillnull value=null
+
+ Explanation:
+Base Search: Starts with the defined saved search: IC# reboot and shutdown status.
+
+Append: Adds results from the target search filtering specific hosts and logs.
+
+stats max(Alert_Errors) by abnode, _time: Calculates the maximum alert error count per entity (node).
+
+timechart span=15m: Aggregates this over a 600-minute window (configured in KPI settings).
+
+fillnull value=null: To match the spec "fill gaps with null".
+
+⚙️ KPI Settings Summary (in ITSI):
+Entity Split Field: abnode
+
+Unit: num
+
+Monitoring Lag: 10
+
+Thresholding:
+
+Per Entity Thresholds:
+
+Normal: 1
+
+Low: 2
+
+Aggregate Thresholds (if needed): Same values
+
+Severity Mapping: Base Severity = Normal
