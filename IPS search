@@ -63,3 +63,52 @@ Adds a new field called Listener_Errors:
 If the sourcetype is oracle:listener:text, then Listener_Errors = 2.
 
 Otherwise, Listener_Errors = 1.
+################################################################################################
+(index=database) OR (index=custom sourcetype = informatica:node_log) (utinip72 OR utinip73 OR usatixn OR usatix7a OR usatix6z OR usatix5r)
+leval status=case(error_type="shutdown", "3", error_type="reboot", 2,error_type="57019", 2,1=1, 1)
+
+❗ Issues:
+Incorrect use of OR and parentheses:
+
+(index=custom sourcetype = informatica:node_log) is invalid. index and sourcetype are separate search terms and need to be grouped properly.
+
+Typo in leval:
+
+Should be | eval, not leval.
+
+Incorrect field name logic:
+
+You have 1=1 inside the case function, which is valid logic in some programming languages to denote a default, but in Splunk case() evaluates expressions; the proper default approach is to use a final true() condition.
+
+Mixing string and numeric values inconsistently in case():
+
+You use "3" (string), 2 (number), and 1 (number). While Splunk can handle this, it's better to stay consistent.
+
+Correct Version:
+
+(index=database OR index=custom) (sourcetype="informatica:node_log" OR sourcetype="oracle:listener:text")
+| search utinip72 OR utinip73 OR usatixn OR usatix7a OR usatix6z OR usatix5r
+| eval status=case(
+    error_type == "shutdown", 3,
+    error_type == "reboot", 2,
+    error_type == "57019", 2,
+    true(), 1
+)
+
+
+What This Search Does:
+Searches across both database and custom indexes.
+
+Filters for events where:
+
+sourcetype is either informatica:node_log or oracle:listener:text.
+
+Raw event contains any of these strings: utinip72, utinip73, usatixn, usatix7a, usatix6z, or usatix5r.
+
+Creates a new field status using case() logic:
+
+If error_type is "shutdown" → status = 3
+
+If error_type is "reboot" or "57019" → status = 2
+
+Otherwise (default) → status = 1
