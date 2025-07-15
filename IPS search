@@ -36,3 +36,8 @@ Low: 2
 Aggregate Thresholds (if needed): Same values
 
 Severity Mapping: Base Severity = Normal
+
+######################################################################
+(index=database OR index=custom) (sourcetype="informatica:node_log" OR sourcetype="oracle:alert:text")
+| search utinip72 OR utinip73 OR usatix5n OR usatix7a OR usatix6z OR usatix5r
+| eval Alert_Errors = if(sourcetype == "oracle:alert:text", 2, 1)
