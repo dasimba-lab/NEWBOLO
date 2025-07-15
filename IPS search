@@ -41,3 +41,25 @@ Severity Mapping: Base Severity = Normal
 (index=database OR index=custom) (sourcetype="informatica:node_log" OR sourcetype="oracle:alert:text")
 | search utinip72 OR utinip73 OR usatix5n OR usatix7a OR usatix6z OR usatix5r
 | eval Alert_Errors = if(sourcetype == "oracle:alert:text", 2, 1)
+
+######################################################################
+(index=database OR index=custom) (sourcetype="informatica:node_log" OR sourcetype="oracle:listener:text")
+| search utinip72 OR utinip73 OR usatixn OR usatix7a OR usatix6z OR usatix5r
+| eval Listener_Errors = if(sourcetype=="oracle:listener:text", 2, 1)
+
+What this search does now:
+Searches logs from:
+
+The database or custom index.
+
+Only where sourcetype is either informatica:node_log or oracle:listener:text.
+
+Filters events that contain any of the following keywords (in any field):
+
+utinip72, utinip73, usatixn, usatix7a, usatix6z, or usatix5r.
+
+Adds a new field called Listener_Errors:
+
+If the sourcetype is oracle:listener:text, then Listener_Errors = 2.
+
+Otherwise, Listener_Errors = 1.
