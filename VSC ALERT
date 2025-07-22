@@ -12,3 +12,26 @@ index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" transa
     | stats avg(availability) as avg_availability by application_name 
     | where avg_availability < 100]
 |stats min(avg_availability) as avg_availability by application_name
+
+
+
+###################################################################################################################
+
+(
+    search index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" transaction_name IN ("GSC-Dashboard_Portal","GSC-Dashboard_Whoami") (status=1 OR status=0)
+    | eval total_hits=1, error_hits=if(status=1, 1, 0)
+    | stats sum(total_hits) as total, sum(error_hits) as errors by application_name
+    | eval availability=round(((total - errors) / total) * 100, 2)
+    | where availability <= 50
+    | rename availability as avg_availability
+)
+| append
+    [
+        search index=topaz sourcetype="topaz:availability" application_name="GSC_Portal" transaction_name IN ("GSC-Dashboard_ERIAD-Check","GSC-Dashboard_TIMPO-Check") (status=1 OR status=0)
+        | eval total_hits=1, error_hits=if(status=1, 1, 0)
+        | stats sum(total_hits) as total, sum(error_hits) as errors by application_name
+        | eval availability=round(((total - errors) / total) * 100, 2)
+        | where availability < 100
+        | rename availability as avg_availability
+    ]
+| stats min(avg_availability) as avg_availability by application_name
