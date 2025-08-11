@@ -1,0 +1,11 @@
+(index=database OR index=iis OR index=custom)
+host IN (USATHPKO, USATHPKQ, USATHY3R, UTINHUOB, UTINHUOC, UTINHUOD, USATHPKB, USATHPKC)
+| rex field=_raw mode=sed "s/V//g s/\"//g s/\//g s/\=//g"
+| rex field=_raw " - (?<http_code>\d+).?"
+| rex field=SERVER "SERVER NAME'=>\s'(?<entity_name>\w+)"
+| rex field=_raw "Logon (?<sql_status>[A-Z]+)"
+| eventstats count AS host_hit_count BY host, http_code
+| eval http_5xx_error_count = if(http_code >= 500 AND http_code < 600, host_hit_count, 0)
+| where http_5xx_error_count > <THRESHOLD>
+| table host, entity_name, http_code, http_5xx_error_count, sql_status
+| sort - http_5xx_error_count
