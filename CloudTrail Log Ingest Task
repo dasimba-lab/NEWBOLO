@@ -710,14 +710,21 @@ Alert with phased notification rollout.
 ITSI KPI ready for integration after threshold agreement.
 
 If you want, I can now prepare the exact XML/JSON panel code so you can drop this straight into a Splunk dashboard without manual setup. That way you can validate the methodology right away.
+###################################################################################################################
 
+| tstats count as event_count 
+  where index=cloud-aws 
+    (sourcetype=aws:elb:accesslogs 
+     OR sourcetype=aws:audit:logs 
+     OR sourcetype=aws:cloudtrail 
+     OR sourcetype=aws:route53)
+    host=splunk-httpinput.health.mil 
+  by source, sourcetype, POR, _time span=60m
+| timechart span=60m sum(event_count) as total_events 
+    by sourcetype
+| addtotals fieldname=grand_total
+| eval status=if(grand_total==0, "Failure", "OK")
+| eval failure_sparkline = sparkline(total_events, 1d)
 
-
-
-
-
-
-
-Voice chat ende
 
 
