@@ -466,3 +466,47 @@ Simulate a missing log scenario by filtering test data.
 Make sure the alert fires and emails are received.
 
 
+##############################################################################################
+Questions
+1. Requirements & Scope
+
+Can you clarify what “heartbeat” means for this use case—are we looking for any CloudTrail events per logGroup within a time window, or a specific event type?
+
+What is the acceptable “no data” threshold before it’s considered a failure? (e.g., 5 min, 15 min, 1 hour)
+
+Are we monitoring all CloudTrail logGroups or only a specific subset? If a subset, can you provide the list?
+
+2. Dashboard Structure & Metrics
+
+What key fields or metrics should the dashboard show besides ingestion status (e.g., volume, last event time, source count)?
+
+Should the dashboard display historical trends or only current status?
+
+Are there any specific visual formats you prefer (e.g., timechart, table, single-value panel)?
+
+3. Alerts & Notifications
+
+How often should the alert check for missed data (e.g., every 5 min, every hour)?
+
+Should the alert reset automatically when data resumes, or require manual acknowledgment?
+
+Should Kevin Butters and Avery D be notified only on failures, or also on recoveries?
+
+Is email the only notification method, or do you want Splunk alert actions to include other channels (e.g., Slack, ServiceNow)?
+
+4. Detection Logic & Query Details
+
+Can you confirm the sample query provided is the baseline or is it already validated?
+
+What exactly does POR and POUR represent in this query, and do we have documentation for those fields?
+
+Should the tstats search span a specific time range (e.g., last 24 hours, last 60 minutes) for detection?
+
+Do we need to enrich the results with logGroup names, AWS account IDs, or regions?
+
+5. ITSI Integration
+
+How should this tie into the “MMA Splunk Enterprise Data Availability” service—should it be a new KPI or enhance an existing one?
+
+What thresholds and severity levels should be configured in ITSI for this KPI?
+
