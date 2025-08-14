@@ -529,3 +529,195 @@ No enrichment is needed. Events should include all that is needed.
 
 This can be integrated into ITSI in whichever way you think is best.  We would need to have a discussion on thresholds and severity and what the results would be.
 
+####################################################################################################
+Proposed Solution
+Here’s a proposed solution to the “CloudTrail Ingest Heartbeat by LogGroup” task using the answers you provided, with integration into ITSI and an initial 1-hour failure detection threshold.
+. Detection Logic
+We’ll use a tstats search to check ingestion for the key AWS sourcetypes:
+
+aws:elb:accesslogs
+
+aws:audit:logs
+
+aws:cloudtrail
+
+aws:route53
+
+Example detection search (for last 60 minutes):
+
+| tstats count as event_count 
+    where index=cloud-aws sourcetype IN ("aws:elb:accesslogs", "aws:audit:logs", "aws:cloudtrail", "aws:route53") 
+    by sourcetype host 
+| eval time_checked=strftime(now(), "%Y-%m-%d %H:%M:%S")
+| eval status=if(event_count>0, "OK", "No Data")
+
+
+This checks for data every hour per sourcetype/host.
+
+If event_count = 0 for a sourcetype in that period, it’s a failure.
+
+
+2. Dashboard Design
+Purpose: Validate methodology before turning into alerts.
+
+Panels:
+
+Panel 1 – Current Status Table: sourcetype, host, event count in last 60 min, status (OK/No Data).
+
+Panel 2 – Historical Trend: Sparkline of event count over the last 24 hours for each sourcetype (using timechart).
+
+spl
+| tstats count where index=cloud-aws sourcetype IN ("aws:elb:accesslogs", "aws:audit:logs", "aws:cloudtrail", "aws:route53") 
+  by _time sourcetype span=1h
+| timechart span=1h sum(count) as events by sourcetype
+
+
+Keep dashboard lightweight for quick loading.
+
+Include filtering by sourcetype & host for ad-hoc checks.
+
+3. Alert Configuration
+Name: Cloud AWS LogGroup Ingest Failure (Hourly)
+
+Schedule: Every 60 minutes
+
+Trigger Condition: status = "No Data" for any monitored sourcetype
+
+Reset: Automatic on next successful ingest (no manual reset needed)
+
+Notifications:
+
+Initial testing phase: Send to you & Paul only.
+
+After validation: Expand to Kevin Butters & Avery D (with training on interpretation).
+
+
+
+4. ITSI Integration
+Create a Service: MMA - AWS Cloud Logs Ingestion
+
+Add KPIs for each sourcetype using the tstats logic above.
+
+Thresholds:
+
+Critical (red): event_count = 0 in last 60 min
+
+Normal (green): event_count > 0
+
+Severity mapping:
+
+Critical = KPI 0 (no ingest)
+
+Normal = KPI 100 (ingest present)
+
+Use KPI-based Episode Alerts to aggregate failures across sourcetypes into a single incident.
+
+
+Approval & Redundancy Check
+Share dashboard with VVP for review to confirm:
+
+No duplicate coverage with existing monitoring.
+
+Query efficiency & quick load time.
+
+Once approved, migrate KPI searches to ITSI and enable alerting.
+
+###################################################################################################
+I can now draft the exact Splunk dashboard JSON with the tstats queries, sparkline trends, and filtering so you can import it directly. That way, you’ll have the “validation” dashboard ready before alerting is turned on.
+
+Here’s the proposed solution for your task based on the answers you provided:
+
+1. Objective
+Create a Splunk search, dashboard, and alert to monitor for 1-hour failures across specific AWS sourcetypes (aws:elb:accesslogs, aws:audit:logs, aws:cloudtrail, aws:route53) filtered by POR.
+
+2. Search Query (Tstats for performance)
+spl
+Copy
+Edit
+| tstats count as event_count 
+  where index=* 
+    (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) 
+    POR=* 
+  by _time, sourcetype span=60m
+| eval status=if(event_count==0,"FAILURE","OK")
+| table _time sourcetype event_count status
+Notes:
+
+span=60m checks counts per hour.
+
+POR=* assumes POR is a field in the data — adjust to your exact field name.
+
+status determines whether it’s a failure or not based on zero events.
+
+3. Dashboard
+Panel 1:
+
+Type: Timechart with sparkline for daily trend.
+
+Purpose: Quickly visualize if there have been drops to zero events over time.
+
+Example Search for Sparkline:
+
+spl
+Copy
+Edit
+| tstats count as event_count 
+  where index=* (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) POR=* 
+  by _time span=1h 
+| timechart span=1h sum(event_count) as total
+| eval trend=sparkline(total)
+4. Alert
+Type: Scheduled Search
+
+Run Every: Hour
+
+Condition: status="FAILURE"
+
+Reset: Automatic reset after next successful run.
+
+Recipients: You + Paul (during testing)
+
+Future: Add Kevin & Avery after validation.
+
+Search for Alert Condition:
+
+spl
+Copy
+Edit
+| tstats count as event_count 
+  where index=* (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) POR=* 
+  by _time span=60m 
+| where event_count=0
+5. ITSI Integration
+Create a KPI in ITSI using the same Tstats search.
+
+KPI Thresholds & Severity to be defined in follow-up meeting.
+
+Example:
+
+Critical: event_count=0
+
+Normal: event_count>0
+
+✅ End Result:
+
+Hourly failure detection.
+
+Dashboard with historical trends via sparklines.
+
+Alert with phased notification rollout.
+
+ITSI KPI ready for integration after threshold agreement.
+
+If you want, I can now prepare the exact XML/JSON panel code so you can drop this straight into a Splunk dashboard without manual setup. That way you can validate the methodology right away.
+
+
+
+
+
+
+
+
+Voice chat ende
+
+
