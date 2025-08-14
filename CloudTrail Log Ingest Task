@@ -510,3 +510,22 @@ How should this tie into the “MMA Splunk Enterprise Data Availability” servi
 
 What thresholds and severity levels should be configured in ITSI for this KPI?
 
+######################################################################################
+Answers:
+Start with 1 hour failure.
+
+Monitor these sourcetypes, aws:elb:accesslogs, aws:audit:logs, aws:cloudtrail, aws:route53 by POR
+
+
+Dashboard can be simple, as it is just need to validate the methodolgy before moving to an alert. Some way of knowing the historical trend may be help, so a sparkline for a day if it searches quickly.
+
+
+Alert can check hourly. Automatic reset. Notifications to me and Paul until we are confident it doesn't generate false positive. Kevin and Avery will need to be trained on it as well.
+
+
+Tstats for 60 minutes is good for alerts.
+No enrichment is needed. Events should include all that is needed.
+
+
+This can be integrated into ITSI in whichever way you think is best.  We would need to have a discussion on thresholds and severity and what the results would be.
+
