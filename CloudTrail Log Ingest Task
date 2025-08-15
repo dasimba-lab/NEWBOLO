@@ -896,10 +896,12 @@ This search monitors AWS log ingestion health for specific AWS services, visuali
         OR sourcetype=aws:cloudtrail 
         OR sourcetype=aws:route53) 
         host=splunk-httpinput.health.mil 
-    by source, sourcetype, POR, _time span=60m
-| stats sum(event_count) as total_events 
+    by source, sourcetype, _time span=60m
+| stats 
+    sum(event_count) as total_events 
     latest(_time) as recentTime 
-    by source, sourcetype, POR
+    values(POR) as POR
+    by source, sourcetype
 | eval age = now() - recentTime
 | eval status = if(isnull(recentTime) OR total_events==0, "Missing", "OK")
 | eval duration = if(status=="Missing", tostring(age, "duration"), "0s")
