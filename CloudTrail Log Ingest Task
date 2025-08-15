@@ -908,3 +908,24 @@ This search monitors AWS log ingestion health for specific AWS services, visuali
 | eval recentTime = coalesce(strftime(recentTime, "%a, %b %d %H:%M:%S %Z %Y"), "Never")
 | eval kpi_value = if(status=="OK", 0, 1)
 | table source, sourcetype, POR, status, duration, recentTime, total_events, kpi_value
+
+
+#############################################################################################################################
+
+| tstats count as event_count 
+    where index=cloud-aws 
+        (sourcetype=aws:elb:accesslogs 
+        OR sourcetype=aws:audit:logs 
+        OR sourcetype=aws:cloudtrail 
+        OR sourcetype=aws:route53) 
+        host=splunk-httpinput.health.mil 
+    by source, sourcetype, POR, _time span=60m
+| stats sum(event_count) as total_events 
+    latest(_time) as recentTime 
+    by source, sourcetype, POR
+| eval age = now() - recentTime
+| eval status = if(isnull(recentTime) OR total_events==0, "Missing", "OK")
+| eval duration = if(status=="Missing", tostring(age, "duration"), "0s")
+| eval recentTime = coalesce(strftime(recentTime, "%a, %b %d %H:%M:%S %Z %Y"), "Never")
+| eval kpi_value = if(status=="OK", 0, 1)
+| table source, sourcetype, POR, status, duration, recentTime, total_events, kpi_value
