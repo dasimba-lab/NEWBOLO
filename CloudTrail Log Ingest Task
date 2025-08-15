@@ -726,5 +726,23 @@ If you want, I can now prepare the exact XML/JSON panel code so you can drop thi
 | eval status=if(grand_total==0, "Failure", "OK")
 | eval failure_sparkline = sparkline(total_events, 1d)
 
+######################################################################################################################
+
+| tstats count as event_count 
+    where index=cloud-aws 
+      (sourcetype=aws:elb:accesslogs 
+       OR sourcetype=aws:audit:logs 
+       OR sourcetype=aws:cloudtrail 
+       OR sourcetype=aws:route53) 
+      host=splunk-httpinput.health.mil 
+    by source, sourcetype, _time span=60m
+| timechart span=60m sum(event_count) as total_events by sourcetype
+| addtotals fieldname=grand_total
+| eval status = if(grand_total==0, "Missing", "OK")
+| eval kpi_value = if(status=="OK", 0, 1)
+| eval recentTime = now()
+| eval age = now() - recentTime
+| eval duration = if(status=="Missing", tostring(age, "duration"), "0s")
+| table sourcetype, status, duration, recentTime, kpi_value
 
 
