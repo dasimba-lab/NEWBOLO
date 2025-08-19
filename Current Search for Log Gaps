@@ -47,3 +47,24 @@
 | eval duration = tostring(duration, "duration")
 | table source, sourcetype, POR, status, duration, LatestEvent, kpi_value
 
+############################################################################################################
+| tstats latest(_time) as time, values(POR) as POR
+    where index=cloud-aws 
+        (sourcetype=aws:elb:accesslogs 
+        OR sourcetype=aws:audit:logs 
+        OR sourcetype=aws:cloudtrail 
+        OR sourcetype=aws:route53) 
+        host=splunk-httpinput.health.mil 
+    by source, sourcetype 
+| eval duration = now() - time
+| eval status = case(
+        isnull(time), "Missing",
+        duration > 3600, "Missing",
+        duration <= 3600, "OK"
+    )
+| eval kpi_value = if(status="OK", 0, 1)
+| convert ctime(time) as LatestEvent
+| eval duration = tostring(duration, "duration")
+| table source, sourcetype, POR, status, duration, LatestEvent, kpi_value
+
+
