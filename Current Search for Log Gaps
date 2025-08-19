@@ -15,3 +15,18 @@
 | eval recentTime = coalesce(strftime(recentTime, "%a, %b %d %H:%M:%S %Z %Y"), "Never")
 | eval kpi_value = if(status=="OK", 0, 1)
 | table source, sourcetype, POR, status, duration, recentTime, total_events, kpi_value
+
+
+#################################################################################
+
+| tstats latest(_time) as time , values(POR) as POR
+    where index=cloud-aws 
+        (sourcetype=aws:elb:accesslogs 
+        OR sourcetype=aws:audit:logs 
+        OR sourcetype=aws:cloudtrail 
+        OR sourcetype=aws:route53) 
+        host=splunk-httpinput.health.mil 
+    by source, sourcetype 
+
+| eval duration=now() - time
+|convert ctime(time) as "LatestEvent"
