@@ -1,0 +1,11 @@
+| tstats latest(_time) as last_event_time, values(POR) as POR 
+  where index=cloud-aws (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) 
+  host=splunk-httpinput.health.mil 
+  by source, sourcetype 
+| eval duration = now() - last_event_time 
+| eval status = case(
+      duration < 900, "OK",
+      duration >= 900 AND duration < 3600, "Warning",
+      duration >= 3600 OR isnull(last_event_time), "Critical"
+  ) 
+| table source sourcetype last_event_time duration status
