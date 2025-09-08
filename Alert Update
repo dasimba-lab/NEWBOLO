@@ -25,3 +25,17 @@
   ) 
 | search status!="OK"
 | table source sourcetype last_event_time duration status
+
+
+| tstats latest(time) as time, values(POR) as POR 
+    where index=cloud-aws 
+        (sourcetype=aws:elb:accesslogs 
+        OR sourcetype=aws:audit:logs 
+        OR sourcetype=aws:cloudtrail 
+        OR sourcetype=aws:route53) 
+        host=splunk-httpinput.health.mil 
+    by source, sourcetype 
+| eval duration = now() - time 
+| eval status = if(duration > 3600 OR isnull(time), "Missing", "OK") 
+| eval kpi_value = if(status="OK", 10, 1)
+
