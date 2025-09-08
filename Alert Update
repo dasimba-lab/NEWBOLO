@@ -9,3 +9,19 @@
       duration >= 3600 OR isnull(last_event_time), "Critical"
   ) 
 | table source sourcetype last_event_time duration status
+
+
+
+
+| tstats latest(_time) as last_event_time 
+  where index=cloud-aws (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) 
+  host=splunk-httpinput.health.mil 
+  by source, sourcetype 
+| eval duration = now() - last_event_time 
+| eval status = case(
+      duration >= 3600 OR isnull(last_event_time), "Critical",
+      duration >= 900, "Warning",
+      true(), "OK"
+  ) 
+| search status!="OK"
+| table source sourcetype last_event_time duration status
