@@ -112,4 +112,3 @@
         status="Low", 10
     )
 | eval time=ctime(time), last_event_time=ctime(last_event_time)
-
