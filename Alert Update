@@ -177,3 +177,19 @@ SAMPLE IDS MISSING LOGS
 | eval recentTime=coalesce(strftime(recentTime, "%+"), "Never")
 | eval kpi_value=if(status=="OK", 0, 1)
 | table host, status, duration, recentTime, kpi_value
+
+
+###########################################################################################
+Current:
+| tstats count latest(_time) as last_event_time 
+  where index=cloud-aws (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) 
+  host=splunk-httpinput.health.mil 
+  by source, sourcetype 
+| eval duration = now() - last_event_time 
+| eval status = case(
+      duration >= 3600 OR isnull(last_event_time), "Critical",
+      duration >= 900, "Warning",
+      true(), "OK"
+  ) 
+| search status!="OK" AND count > 1000
+| table count source sourcetype last_event_time duration status
