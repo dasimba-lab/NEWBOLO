@@ -131,3 +131,17 @@
 | eval kpi_value = if(status="OK", 10, 1) 
 | eval time=ctime(time)
 
+####################################################################################################################
+
+| tstats latest(_time) as last_event_time 
+  where index=cloud-aws (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) 
+  host=splunk-httpinput.health.mil 
+  by source, sourcetype 
+| eval duration = now() - last_event_time 
+| eval status = case(
+      duration >= 3600 OR isnull(last_event_time), "Critical",
+      duration >= 900, "Warning",
+      true(), "OK"
+  ) 
+| search status!="OK"
+| table source sourcetype last_event_time duration status | `filter_maintenance_services("c3170276-3f4d-486e-b6e5-95577b4a9552")`
