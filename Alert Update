@@ -163,3 +163,17 @@
 | table source sourcetype last_event_time duration status 
 | `filter_maintenance_services("c3170276-3f4d-486e-b6e5-95577b4a9552")`
 
+###############################################################################################################################
+SAMPLE IDS MISSING LOGS
+
+| metadata type=hosts index=net-ids | fields host, recentTime | eval age=now() - recentTime | eval status=case( isnull(recentTime), "Missing", age > 900, "Missing", true(), "OK" ) | eval duration=if(status=="Missing", tostring(age, "duration"), "0s") | eval recentTime=coalesce(strftime(recentTime, "%+"), "Never") | eval kpi_value=if(status=="OK", 0, 1) | table host, status, duration, recentTime, kpi_value
+
+#########################################################
+| metadata type=hosts index=corelight
+| fields host, recentTime
+| eval age=now() - recentTime
+| eval status=case( isnull(recentTime), "Missing", age > 900, "Missing", true(), "OK" )
+| eval duration=if(status=="Missing", tostring(age, "duration"), "0s")
+| eval recentTime=coalesce(strftime(recentTime, "%+"), "Never")
+| eval kpi_value=if(status=="OK", 0, 1)
+| table host, status, duration, recentTime, kpi_value
