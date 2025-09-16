@@ -1,0 +1,140 @@
+Certainly! Here's a structured approach to presenting the new features of Splunk version 10, focusing on the key points you've mentioned:
+
+1. Introduction to the New Search Sequence in Splunk 10
+Explain the change: In Splunk 10, field filters are now processed first in the sequence of search-time operations.
+Previous behavior: Previously, field filters were processed fourth in the sequence.
+Implication: This change impacts how downstream operations (like data transformations or visualizations) work, because filtering occurs earlier, possibly affecting data availability later in the process.
+2. Understanding the Impact of Field Filters Moving First
+Downstream operations: Because filters are applied earlier, any operations that depend on specific field values (like calculations, joins, or visualizations) might break or produce unexpected results if the expected data is filtered out prematurely.
+Reference: Mention the official documentation—"The sequence of search-time operations in the Splunk Platform Manual"— for detailed insights.
+3. Considerations for Organizations Using CIM
+Role of CIM: The Splunk Common Information Model (CIM) standardizes fields across data sources.
+Impact on sensitive fields: When applying field filters in environments using CIM, be aware of impact on:
+Data model acceleration (DMA)
+Data integrity and search performance
+Best practice: Understand how field filtering might affect data models and performance optimization strategies, especially when working with sensitive data.
+4. Steps to Approach and Answer These Questions
+A. Prepare your presentation content:
+Explain the change: Use diagrams or flowcharts illustrating before and after search sequences.
+Discuss implications: Provide examples of how early filtering could affect common use cases.
+Highlight best practices:
+Carefully plan where to apply field filters.
+Test search queries after upgrades.
+Monitor data model performance post-filtering.
+B. Practical demonstration:
+Show example SPL (Search Processing Language) queries demonstrating:
+Filtering prior to other operations.
+Possible issues with downstream operations.
+Discuss data model impact and ways to mitigate these issues.
+C. Use real-world scenarios:
+Scenario 1: Filtering sensitive data early to improve performance.
+Scenario 2: Filtering that inadvertently removes data required for subsequent calculations.
+D. Reference official documentation:
+"The sequence of search-time operations" in Splunk documentation.
+"Plan for field filters" in the security and data model manuals.
+5. Summary and Recommendations
+Emphasize reviewing existing searches after upgrading.
+Advocate for testing in a controlled environment before deploying changes broadly.
+Encourage collaboration with data model and security teams to optimize use of field filters without compromising data integrity.
+
+####################################################################################EXAMPLE
+
+Thank you for sharing the additional SPL. I'll extract the key elements, analyze how it demonstrates the search sequence change, and create specific examples for your presentation.
+
+Your SPL (Corrected for clarity):
+splunk
+Copy
+| tstats latest(_time) as time, values(POR) as POR
+  where index=cloud-aws
+    (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53)
+    host= splunk-httpinput.health.mil
+  by source, sourcetype
+
+| eval duration = now() - time
+
+| eval status = if(isnull(time) OR duration > 3600, "Missing", "OK")
+
+| eval kpi_value=if(status="OK", 0.1, null())
+
+| eval LatestEvent=strftime(time, "%Y-%m-%d %H:%M:%S")
+
+| eval duration_str=tostring(duration, "duration")
+
+| table source, sourcetype, POR, status, duration_str, LatestEvent, kpi_value
+Key points:
+Fetches latest event time (latest(_time)) and associated POR values.
+Evaluates duration since last event.
+Determines status (Missing or OK) based on time and duration.
+Calculates a KPI value if status is OK.
+Converts time and duration for display.
+Final table shows these fields.
+Analyzing Search Sequence Change:
+Before (Pre-Splunk 10):
+Data retrieval (tstats)
+Calculations (eval) for duration, status, kpi_value
+Filtering on status (or kpi_value)
+Final table
+Order:
+
+Data fetch (tstats)
+Eval for status and KPI
+Filter on status or KPI
+Final output
+After (Splunk 10+):
+Field filters like search status="Missing" or search status="OK" are processed immediately, before expensive calculations.
+Order:
+
+Data fetch (tstats)
+Filter on status immediately (simulating newer behavior)
+Perform eval calculations on reduced data
+Output
+Demonstration Example:
+Step 1: Run the original SPL — with filtering after evaluation.
+splunk
+Copy
+| tstats latest(_time) as time, values(POR) as POR
+  where index=cloud-aws
+    (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53)
+    host= splunk-httpinput.health.mil
+  by source, sourcetype
+
+| eval duration = now() - time
+
+| eval status=if(isnull(time) OR duration > 3600, "Missing", "OK")
+
+| eval kpi_value=if(status="OK", 0.1, null())
+
+| eval LatestEvent=strftime(time, "%Y-%m-%d %H:%M:%S")
+
+| eval duration_str=tostring(duration, "duration")
+
+| table source, sourcetype, POR, status, duration_str, LatestEvent, kpi_value
+Step 2: Modified SPL with early filtering:
+splunk
+Copy
+| tstats latest(_time) as time, values(POR) as POR
+  where index=cloud-aws
+    (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53)
+    host= splunk-httpinput.health.mil
+  by source, sourcetype
+
+| eval duration= now() - time
+
+| eval status=if(isnull(time) OR duration > 3600, "Missing", "OK")
+
+| search status="OK"  # now processed earlier, filtering on 'status' before calculating KPI
+
+| eval kpi_value=if(status="OK", 0.1, null())
+
+| eval LatestEvent=strftime(time, "%Y-%m-%d %H:%M:%S")
+
+| eval duration_str=tostring(duration, "duration")
+
+| table source, sourcetype, POR, status, duration_str, LatestEvent, kpi_value
+Visual Diagrams for Your Presentation:
+Create flowcharts illustrating that filtering on status occurs immediately in the new sequence, reducing data processed in subsequent steps.
+
+Summary:
+Show how filtering earlier can improve performance by limiting data for subsequent evals.
+
+
