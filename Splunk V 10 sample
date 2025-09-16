@@ -1,0 +1,113 @@
+Below are practical, ready-to-run SPL examples you can paste into your Splunk (adjust index/sourcetype/time range as needed), plus a few short demos that show how the change in field-filter ordering can affect results. I also include quick how-to notes so you can adapt each search to your CloudTrail parsing.
+
+Notes before you run:
+
+Replace index=aws and sourcetype="aws:cloudtrail" with your actual index/sourcetype if different.
+CloudTrail fields may be nested JSON (e.g., userIdentity.userName, requestParameters, responseElements). Adjust the field names to match your extractions.
+Time ranges: pick a suitable time range in the Splunk UI (e.g., Last 24 hours, Last 7 days).
+Failed and successful console login counts per user
+Purpose: Show failed vs successful console logins.
+SPL:
+index=aws sourcetype="aws:cloudtrail" eventName=ConsoleLogin
+| eval console_result=coalesce(responseElements.ConsoleLogin, responseElements) 
+| stats count(eval(console_result="Failure")) AS failures count(eval(console_result="Success")) AS successes by userIdentity.userName, sourceIPAddress
+| where failures>0
+Notes: Some CloudTrail payloads put the result in responseElements.ConsoleLogin or in a different JSON key — use eval/coalesce to handle variants.
+
+Alertable high-failure console login (threshold)
+Purpose: Detect users with more than N failed logins in a window.
+SPL:
+index=aws sourcetype="aws:cloudtrail" eventName=ConsoleLogin
+| eval console_result=coalesce(responseElements.ConsoleLogin, responseElements)
+| stats count(eval(console_result="Failure")) AS failures by userIdentity.userName
+| where failures > 5
+| sort -failures
+Notes: Use as a scheduled saved search / alert.
+
+Detect root-account usage
+Purpose: Quickly see root API/console calls.
+SPL:
+index=aws sourcetype="aws:cloudtrail" userIdentity.type="Root"
+| table _time, eventName, userIdentity.arn, userIdentity.sessionContext, sourceIPAddress, awsRegion, requestParameters
+| sort -_time
+
+IAM creation / credential creation events (suspicious when unexpected)
+Purpose: Find creation of IAM users, access keys, login profiles, or policy attachments.
+SPL:
+index=aws sourcetype="aws:cloudtrail" (eventName=CreateUser OR eventName=CreateLoginProfile OR eventName=CreateAccessKey OR eventName=AttachUserPolicy OR eventName=PutUserPolicy)
+| stats count by eventName, userIdentity.userName, userIdentity.arn, sourceIPAddress, awsRegion
+| sort -count
+
+Privilege escalation indicators (AddUserToGroup admin, PutRolePolicy, AttachRolePolicy)
+Purpose: Surface likely privilege escalation actions.
+SPL:
+index=aws sourcetype="aws:cloudtrail" (eventName=AddUserToGroup OR eventName=PutGroupPolicy OR eventName=AttachUserPolicy OR eventName=PutRolePolicy OR eventName=AttachRolePolicy)
+| search requestParameters.groupName="Admin" OR requestParameters.policyName="Admin" OR requestParameters.policyArn="AdministratorAccess"
+| table _time, eventName, userIdentity.userName, requestParameters, sourceIPAddress, awsRegion
+
+CloudTrail disabling / trail deletion attempts
+Purpose: Detect StopLogging, DeleteTrail or changes that remove audit trail.
+SPL:
+index=aws sourcetype="aws:cloudtrail" (eventName=StopLogging OR eventName=DeleteTrail OR eventName=UpdateTrail OR eventName=DeleteBucket OR eventName=PutBucketPolicy)
+| table _time, eventName, userIdentity.userName, requestParameters, sourceIPAddress, awsRegion
+| sort -_time
+
+Unusual S3 data access (high volume GETs)
+Purpose: Find unusually high S3 GetObject activity (possible exfil).
+SPL:
+index=aws sourcetype="aws:cloudtrail" eventSource=s3.amazonaws.com eventName=GetObject
+| stats count AS get_count by userIdentity.userName, sourceIPAddress, requestParameters.bucketName
+| where get_count > 1000
+| sort -get_count
+
+Console login from rare country / new geo
+Purpose: Flag login from IPs outside expected country list (requires iplocation and optional lookup of expected countries).
+SPL:
+index=aws sourcetype="aws:cloudtrail" eventName=ConsoleLogin
+| iplocation sourceIPAddress
+| stats count by userIdentity.userName, Country, sourceIPAddress
+| lookup expected_countries userIdentity.userName OUTPUT expected_country
+| where isnull(expected_country) OR Country!=expected_country
+Notes: Create a lookup expected_countries of users → expected country (optional). Otherwise compare to a static expected country.
+
+Preserve per-event context while getting counts (use eventstats)
+Purpose: Show why eventstats is helpful when you need both aggregate counts and raw events (useful after early filtering behavior).
+SPL:
+index=aws sourcetype="aws:cloudtrail" eventName=GetObject
+| eventstats count AS user_get_count by userIdentity.userName
+| where user_get_count > 500
+| table _time, userIdentity.userName, user_get_count, eventName, sourceIPAddress, requestParameters.objectKey
+
+Example showing field-filter ordering impact (use this in your presentation)
+Scenario: You aggregate first, then try to "search" by the aggregated field using the search command vs using where.
+
+Incorrect (common pitfall after field-filters are processed first): index=aws sourcetype="aws:cloudtrail" eventName=ConsoleLogin | stats count BY userIdentity.userName | search count > 1 Explanation: Because field filters (the search) are executed early in the search-time operation sequence, search count>1 will be evaluated before the stats command has created the count field — so it will not filter as you intended (or will return no results). This is a major cause of unexpected results after the Splunk 10 change.
+Correct (use where which is evaluated after stats): index=aws sourcetype="aws:cloudtrail" eventName=ConsoleLogin | stats count BY userIdentity.userName | where count > 1 Explanation: where is evaluated after stats and can filter on fields created by stats.
+When you need aggregated values per-event for later filtering, use streamstats or eventstats Example: flag users who exceed threshold but still show raw events: SPL: index=aws sourcetype="aws:cloudtrail" eventName=GetObject | eventstats count AS user_get_count by userIdentity.userName | where user_get_count > 1000 | table _time, userIdentity.userName, user_get_count, sourceIPAddress, requestParameters.objectKey
+Quick practical checklist for running and validating these queries:
+
+Validate field extractions first: run a raw query (index=... | head 10 | table _raw) and ensure fields such as userIdentity.userName, eventName, responseElements are extracted.
+Choose the right filter type:
+Use search or event-level filters (e.g., eventName=XYZ, userIdentity.type="Root") for filtering raw events early.
+Use where for filtering on fields generated by transforms (stats, eval that runs earlier in pipeline).
+Use eventstats / streamstats when you need aggregates retained per-event for downstream filtering.
+Test in a staging environment or limited time range prior to scheduling or alerting.
+Use search job inspector to see which fields exist at each pipeline step if results look wrong.
+Audit saved searches and dashboards after the Splunk 10 upgrade — any search relying on a 'search' on an aggregated field will likely need changing to where/eventstats.
+Suggested live demo flow for your presentation (train-trainer analogy):
+
+Show a raw CloudTrail event, point out key fields (engine compartment).
+Run a simple filter (eventName=ConsoleLogin) — explain this is a field filter (the engine applies it early).
+Run a stats aggregation and try an incorrect search count>1 (show it fails).
+Replace with where count>1 — show correct behavior.
+Show an eventstats example to keep per-event context.
+Demonstrate a real alert-worthy search (e.g., StopLogging) and show how to schedule it.
+If you want, I can:
+
+Convert 4–6 of these queries into ready-to-import saved searches (XML/JSON) for your environment.
+Create a short slide-ready demo script (steps + screenshots to capture) you can run in front of stakeholders.
+Tailor queries to your exact CloudTrail field names or account IDs (if you paste a sanitized sample _raw event).
+Regenerate
+Copy
+Good response
+Bad response
