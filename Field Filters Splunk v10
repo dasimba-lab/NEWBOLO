@@ -1,0 +1,41 @@
+asic Splunk 10 field-extraction example (using host, sourcetype, source, POR, _time, and event_count from your tstats search)
+
+Suppose you want to extract a simple field "env" from the source name when source contains an environment token like "/prod/" or "/dev/". Use rex to extract after field filters and parsing (post‑extraction), e.g.:
+
+index=cloud-aws sourcetype=aws:cloudtrail host="splunk-httpinput.health.mil"
+| rex field=source "(?/(prod|dev|staging)/)"
+| stats count AS event_count by env sourcetype
+| where env="prod"
+
+Explanation:
+
+Field filters (index, sourcetype, host) are placed first so Splunk 10 applies them before extraction.
+rex extracts the new field env from the parsed source value.
+stats aggregates by the newly extracted field; where filters on env (a computed/extracted field) run after extraction/aggregation.
+If you want an extraction on _raw for later use with tstats, perform the rex before tstats and ensure the extracted field is indexed or you use search-based aggregation instead of tstats.
+
+using same analogy as above,show us the situation in splunk 9
+
+DA
+Pre‑Splunk 10 (Splunk 9) — same example, behavior and SPL
+
+Situation (Splunk 9): field filters could be evaluated later in the pipeline, so authors often relied on filtering/searching against fields created by later commands without needing where/eventstats first.
+
+Example SPL (would work in Splunk 9):
+index=cloud-aws sourcetype=aws:cloudtrail host="splunk-httpinput.health.mil"
+| rex field=source "(?/(prod|dev|staging)/)"
+| stats count AS event_count BY env sourcetype
+| search env="prod"
+| where event_count>10
+
+Why this worked in Splunk 9:
+
+The "| search env='prod'" used after stats could be evaluated after rex/stats created env and event_count, so it filtered correctly.
+Authors commonly mixed search-based filters after transforms because the old ordering allowed it.
+Key difference vs Splunk 10:
+
+In Splunk 10 a "| search env='prod'" placed after stats may be treated as an early field filter (executed before rex/stats create env), so it may fail; the correct pattern in v10 is to use "| where env='prod'" (or compute with eventstats) after the transform.
+Regenerate
+Copy
+Good response
+Bad response
