@@ -94,3 +94,30 @@ Subsearch workaround
 Pre‑Splunk 10 (subsearch used less often for this reason, but worked either way): index=main sourcetype=access_combined [ search index=main sourcetype=access_combined | stats count BY clientip | search count>5 | fields clientip ] | stats count BY clientip
 Splunk 10 (explicit: compute list in subsearch, then filter outer search): index=main sourcetype=access_combined [ search index=main sourcetype=access_combined | stats count BY clientip | where count>5 | fields clientip ] | stats count BY clientip
 Notes: In all “Pre‑Splunk 10” examples authors often used "| search " after transforms; in Splunk 10 replace such uses with "| where" or compute aggregates with eventstats/streamstats or use subsearch/tstats patterns.
+
+
+
+###################################################################################################################################################
+
+Below are the five demo examples revised to use your environment’s fields/structure (tstats with latest time, source, sourcetype, POR). Each pair shows pre‑Splunk‑10 (problematic use of "search" on computed fields) and Splunk‑10 correct patterns (use where/eventstats/subsearch/tstats). Adjust time ranges as needed.
+
+Aggregate then filter (count by source)
+Pre‑Splunk 10 (would rely on search seeing computed field): | tstats count WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" AND (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) BY source,sourcetype | eval duration = now() - latest(_time) | stats count BY source | search count>5
+Splunk 10 (correct): | tstats count WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" AND (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) BY source,sourcetype | stats count BY source | where count>5
+Per‑event/per‑source aggregate with eventstats (error-like flag)
+Pre‑Splunk 10 (problematic): | tstats latest(_time) AS time values(POR) AS POR WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" AND (sourcetype=aws:cloudtrail OR sourcetype=aws:audit:logs) BY source,sourcetype | eval duration = now() - time | stats sum(eval(duration>3600)) AS late_count BY source | search late_count>3
+Splunk 10 (correct — use eventstats to attach counts then filter): | tstats latest(_time) AS time values(POR) AS POR WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" AND (sourcetype=aws:cloudtrail OR sourcetype=aws:audit:logs) BY source,sourcetype | eval is_late = if(isnull(time) OR now()-time>3600,1,0) | eventstats sum(is_late) AS late_count BY source | where late_count>3 | table source, sourcetype, POR, late_count
+Search-time extraction (rex) then filter by extracted field
+Pre‑Splunk 10 (could use search on rex field after stats): index=cloud-aws host="splunk-httpinput.health.mil" sourcetype=aws:elb:accesslogs | rex field=_raw "client=(?\w+)" | stats count BY client_id | search client_id="ABC123"
+Splunk 10 (correct — use where after stats): index=cloud-aws host="splunk-httpinput.health.mil" sourcetype=aws:elb:accesslogs | rex field=_raw "client=(?\w+)" | stats count BY client_id | where client_id="ABC123" | table client_id, count
+tstats (indexed) aggregation — unaffected by ordering (recommended)
+Pre‑Splunk 10 and Splunk 10 (same; fast): | tstats latest(_time) AS time count WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" AND (sourcetype=aws:elb:accesslogs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) BY source,sourcetype | eval duration = now() - time | eval status = case(isnull(time),"Missing", duration>3600,"Missing", true(),"OK") | eval LatestEvent = strftime(time, "%Y-%m-%d %H:%M:%S") | eval duration = tostring(duration,"duration") | table count, source, sourcetype, status, duration, LatestEvent
+Subsearch workaround (compute list then filter outer search)
+Pre‑Splunk 10 (subsearch with search): | tstats count latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype | stats count BY source | search count>5
+Splunk 10 (compute list in subsearch then filter outer tstats): | tstats count latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype | where time>relative_time(now(), "-7d") | fields source sourcetype [ -- or use subsearch pattern: compute high-volume sources first -- ] index=cloud-aws [ search index=cloud-aws host="splunk-httpinput.health.mil" | tstats count WHERE index=cloud-aws BY source | where count>5 | fields source ] sourcetype=* | tstats count latest(_time) AS time WHERE index=cloud-aws BY source,sourcetype | table count, source, sourcetype, time
+Notes:
+
+I aligned fields to your environment: use tstats latest(_time) AS time (or recentTime), values(POR) as POR where needed.
+Replace time with recentTime or LatestEvent naming consistently if you prefer.
+Use where/eventstats instead of search when filtering on computed or tstats-created fields under Splunk 10.
+Run Job Inspector on each to show when fields are created and when filters apply.
