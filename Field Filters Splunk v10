@@ -275,3 +275,55 @@ Regenerate
 Copy
 Good response
 Bad response
+
+#######################################################################################################################################
+
+To force a visible failure (no results) under Splunk 10's field‑filters‑first ordering, you must put a field filter that references a field created later in the pipeline (a computed or extracted field) in a position where the engine will treat it as an early field filter. Splunk 10 will then apply that filter before the field is created and return no results.
+
+Example that will succeed in Splunk 9 but return no results (or incorrect results) in Splunk 10:
+
+Broken (shows no results in Splunk 10 because the search filter runs first)
+index=cloud-aws host="splunk-httpinput.health.mil" sourcetype=aws:elb:accesslogs
+| rex field=_raw "client=(?\w+)"
+| stats count BY client_id
+| search client_id="NONEXISTENT_CLIENT"
+
+Why this breaks in Splunk 10: "search client_id='NONEXISTENT_CLIENT'" is treated as an early field filter and runs before rex and stats create client_id — so the filter finds nothing and the search returns no results.
+
+To demonstrate interactively:
+
+Run the broken query above — you should see zero results (or fewer than expected) in Splunk 10.
+Then run the corrected query that filters after the field exists:
+Correct (works in Splunk 10)
+index=cloud-aws host="splunk-httpinput.health.mil" sourcetype=aws:elb:accesslogs
+| rex field=_raw "client=(?\w+)"
+| stats count BY client_id
+| where client_id="NONEXISTENT_CLIENT"
+
+For an even clearer contrast, use a known existing client id (e.g., "ABC123"):
+Broken (Splunk 10): same as above with search client_id="ABC123" — returns no results.
+Correct (Splunk 10): replace search with where — returns the expected row.
+If you still see results with the "broken" form, it means:
+
+client_id already exists as an indexed/searchable field (created at index time), or
+Splunk is treating that particular "search" as not an early field filter in your environment due to specific query parsing or app behavior.
+To ensure no indexed field exists with that name, test this first:
+index=cloud-aws host="splunk-httpinput.health.mil" sourcetype=aws:elb:accesslogs earliest=-7d
+| head 5
+| table _time source sourcetype client_id _raw
+
+If client_id appears before rex, pick a made-up field name unlikely to exist at index time, e.g., fake_id:
+
+Broken (will show no results in v10)
+index=cloud-aws host="splunk-httpinput.health.mil" sourcetype=aws:elb:accesslogs
+| rex field=_raw "client=(?\w+)"
+| stats count BY client_id
+| search fake_id="no_such_value"
+
+Correct (v10)
+index=cloud-aws host="splunk-httpinput.health.mil" sourcetype=aws:elb:accesslogs
+| rex field=_raw "client=(?\w+)"
+| stats count BY client_id
+| where client_id="expected_value"
+
+Use Job Inspector → Execution timeline to confirm the broken query's "search" filter is applied before rex/stats in Splunk 10.
