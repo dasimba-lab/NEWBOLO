@@ -235,3 +235,43 @@ Index-time processes remain responsible for initial field extraction, sourcetype
 Splunk 10 moves search-time field filters to the very start of the search pipeline — this improves performance but requires rewriting any searches that filtered on fields created later in the pipeline (use where/eventstats/streamstats, or compute via subsearches/tstats).
 
 
+##########################################################################################################################################
+
+Pre‑Splunk 10 (field filters evaluated later — filter runs after eval/stats)
+
+| tstats latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| eval duration = now() - time
+| eval status = if(duration>3600, "Missing", "OK")
+| search status="Missing"
+
+Why: in Splunk 9 the "search" command here was evaluated after eval created status, so it could filter on the computed field and return matching rows.
+
+Splunk 10 (field filters run first — same query will NOT work as intended)
+
+| tstats latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| eval duration = now() - time
+| eval status = if(duration>3600, "Missing", "OK")
+| search status="Missing"
+
+Why it breaks in v10: "search status='Missing'" is treated as an early field filter and runs before eval creates status, so it cannot see the field and returns no results (or unexpected results).
+
+Correct Splunk 10 pattern (filter after field is created)
+
+| tstats latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| eval duration = now() - time
+| eval status = if(duration>3600, "Missing", "OK")
+| where status="Missing"
+
+Alternative showing same logic but keeping per‑event context with eventstats
+
+| tstats latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| eval is_missing = if(isnull(time) OR now()-time>3600, 1, 0)
+| eventstats sum(is_missing) AS missing_count BY source
+| where missing_count>0
+
+Tip: Use the Search Job Inspector on each variant to view the execution timeline and confirm when filters are applied (pre‑v10 the search filter appears after eval; in v10 it appears first).
+
+Regenerate
+Copy
+Good response
+Bad response
