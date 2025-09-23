@@ -39,3 +39,58 @@ Regenerate
 Copy
 Good response
 Bad response
+
+
+###########################################################################################################################
+
+Here are 5 concise SPL examples you can run to demonstrate Splunk 10’s field‑filters‑first behavior, with a one‑line note about what each shows.
+
+Broken vs fixed (aggregate then filter)
+Broken (will fail in v10 if using search on computed field): index=main sourcetype=access_combined | stats count BY clientip | search count>5
+Fixed: index=main sourcetype=access_combined | stats count BY clientip | where count>5 Shows that "search" cannot filter on fields created by stats in v10; use where.
+Preserve per-event context with eventstats
+index=main sourcetype=access_combined
+| eval is_error=if(status>=500,1,0)
+| eventstats sum(is_error) AS error_count BY clientip
+| where error_count>10
+| table _time clientip error_count status uri
+Shows attaching aggregates to each event so you can filter by them after Splunk’s early field filters.
+
+Search-time extraction vs early filter (use rex after initial filters)
+index=main host=webserver* earliest=-24h
+| rex field=_raw "user=(?\w+)"
+| stats count BY user
+| where count>3
+Demonstrates that custom search-time extractions (rex) produce fields usable by where (post-extraction) — but ensure you don’t try to use "search user=..." if user is only created by rex.
+
+tstats vs metadata speed & behavior
+| tstats count WHERE index=_internal AND sourcetype=splunkd_bytray BY host
+| sort -count
+Shows using tstats for indexed fields (fast, uses indexes) and that tstats returns source/host/sourcetype info available at index level, unaffected by search-time ordering.
+
+Field-filter ordering with subsearch (compute then filter via subsearch)
+index=main sourcetype=access_combined [ search index=main sourcetype=access_combined | stats count BY clientip | where count>5 | fields clientip ]
+| stats count BY clientip
+Demonstrates using a subsearch (which runs first) to compute a list, then the outer search filters by that list — a pattern to work around early field-filter limitations when necessary.
+
+Run these in your environment with appropriate time ranges; use Search Job Inspector to show when fields are created and when filters are applied for each example.
+
+modify each examples to show the state of things before splunk 10 and after splunk 10
+
+DA
+Aggregate then filter (count by clientip)
+Pre‑Splunk 10 (worked): index=main sourcetype=access_combined | stats count BY clientip | search count>5
+Splunk 10 (fix): index=main sourcetype=access_combined | stats count BY clientip | where count>5
+Per‑event aggregate with eventstats
+Pre‑Splunk 10 (authors sometimes used search after stats): index=main sourcetype=access_combined | eval is_error=if(status>=500,1,0) | stats sum(is_error) AS error_count BY clientip | search error_count>10
+Splunk 10 (correct; preserve per‑event context alternative): index=main sourcetype=access_combined | eval is_error=if(status>=500,1,0) | eventstats sum(is_error) AS error_count BY clientip | where error_count>10 | table _time clientip error_count status uri
+Search‑time extraction (rex) usage
+Pre‑Splunk 10 (could filter on rex-created field using search): index=main host=webserver* earliest=-24h | rex field=_raw "user=(?\w+)" | stats count BY user | search user="alice"
+Splunk 10 (use where after rex): index=main host=webserver* earliest=-24h | rex field=_raw "user=(?\w+)" | stats count BY user | where user="alice"
+tstats / metadata (indexed aggregation — unaffected by field-filter ordering)
+Pre‑Splunk 10: | tstats count WHERE index=_internal AND sourcetype=splunkd_bytray BY host | sort -count
+Splunk 10 (same; tstats unaffected and recommended for performance): | tstats count WHERE index=_internal AND sourcetype=splunkd_bytray BY host | sort -count
+Subsearch workaround
+Pre‑Splunk 10 (subsearch used less often for this reason, but worked either way): index=main sourcetype=access_combined [ search index=main sourcetype=access_combined | stats count BY clientip | search count>5 | fields clientip ] | stats count BY clientip
+Splunk 10 (explicit: compute list in subsearch, then filter outer search): index=main sourcetype=access_combined [ search index=main sourcetype=access_combined | stats count BY clientip | where count>5 | fields clientip ] | stats count BY clientip
+Notes: In all “Pre‑Splunk 10” examples authors often used "| search " after transforms; in Splunk 10 replace such uses with "| where" or compute aggregates with eventstats/streamstats or use subsearch/tstats patterns.
