@@ -121,3 +121,66 @@ I aligned fields to your environment: use tstats latest(_time) AS time (or recen
 Replace time with recentTime or LatestEvent naming consistently if you prefer.
 Use where/eventstats instead of search when filtering on computed or tstats-created fields under Splunk 10.
 Run Job Inspector on each to show when fields are created and when filters apply.
+
+
+#########################################################################################################################################################
+
+Aggregate then filter (by source)
+Broken (may fail in v10):
+| tstats count WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| stats count BY source
+| search count>5
+Correct (v10):
+| tstats count WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| stats count BY source
+| where count>5
+Latest-event age filter (status)
+Broken (may fail in v10):
+| tstats latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| eval duration = now()-time
+| eval status = if(duration>3600,"Missing","OK")
+| search status="Missing"
+Correct (v10):
+| tstats latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| eval duration = now()-time
+| eval status = if(duration>3600,"Missing","OK")
+| where status="Missing"
+Filter on extracted field (client_id from ELB logs)
+Broken (may fail in v10):
+index=cloud-aws sourcetype=aws:elb:accesslogs host="splunk-httpinput.health.mil"
+| rex field=_raw "client=(?\w+)"
+| stats count BY client_id
+| search client_id="ABC123"
+Correct (v10):
+index=cloud-aws sourcetype=aws:elb:accesslogs host="splunk-httpinput.health.mil"
+| rex field=_raw "client=(?\w+)"
+| stats count BY client_id
+| where client_id="ABC123"
+Per-source lateness count (use eventstats)
+Broken (may fail in v10):
+| tstats latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| eval is_late = if(isnull(time) OR now()-time>3600,1,0)
+| stats sum(is_late) AS late_count BY source
+| search late_count>3
+Correct (v10):
+| tstats latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| eval is_late = if(isnull(time) OR now()-time>3600,1,0)
+| eventstats sum(is_late) AS late_count BY source
+| where late_count>3
+Subsearch to precompute sources then outer tstats (workaround)
+Broken (may fail in v10):
+| tstats count latest(_time) AS time WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source,sourcetype
+| stats count BY source
+| search count>5
+Correct (v10):
+index=cloud-aws [ | tstats count WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" BY source | where count>5 | fields source ] sourcetype=*
+| tstats count latest(_time) AS time WHERE index=cloud-aws BY source,sourcetype
+| table count, source, sourcetype, time
+Regenerate
+Copy
+Good response
+Bad response
+
+Type a message...
+
+
