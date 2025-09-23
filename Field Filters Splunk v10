@@ -182,5 +182,56 @@ Good response
 Bad response
 
 Type a message...
+#############################################################################################################################################################
+
+
+
+
+DA
+Search (example using your environment — starts with index=, source=, sourcetype=):
+index=cloud-aws source="/var/log/aws/elb/*" sourcetype=aws:elb:accesslogs host="splunk-httpinput.health.mil" earliest=-24h
+| rex field=_raw "client=(?\w+)"
+| eval event_ts = coalesce(_time, strptime(_raw, "%Y-%m-%dT%H:%M:%S"))
+| stats count latest(_time) AS recentTime values(client_id) AS clients BY source,sourcetype, host
+| eval age = now() - recentTime
+| eval status = if(isnull(recentTime) OR age>900, "Missing", "OK")
+| eval duration = if(status=="Missing", tostring(age,"duration"), "0s")
+| table count, source, sourcetype, host, status, duration, recentTime, clients
+
+How Splunk 10 differs vs prior versions (mapped to index/search time processes)
+
+Index time (unchanged behavior)
+
+Default field extraction: host, source, sourcetype, and timestamp are still set at ingest (index time) — your index=, source=, sourcetype= filters rely on these.
+Host assignment / sourcetype customization / index-time extractions / timestamping / linebreaking / segmentation continue to run before data is written to disk — nothing changed here in v10.
+Search time (major change in Splunk 10)
+
+Field filters first: In Splunk 10, any search-time field filters (the initial index=, source=, sourcetype=, host= and any leading "search field=value" clauses) are applied before parsing/timestamping and before search-time field extraction (rex, automatic extractions). In the example above, the index/source/sourcetype host filters are correctly placed first so Splunk 10 will apply them early and reduce event volume.
+Effect on rex / search-time extraction: Because field filters run first, do not expect a leading "search" to be able to filter on fields created later by rex/stats/eval — those fields don’t exist yet when early filters are applied. In this search, rex runs after initial filtering and creates client_id for stats/aggregation — but you must not use "| search client_id=..." earlier in the pipeline; use "| where client_id=..." after rex/stats.
+Event segmentation & event typing: These still occur at search time, but segmentation now happens after early filters; any filters that would remove events before segmentation will change the set of events segmented/typed.
+Field aliasing / lookups / sourcetype renaming / tagging: All search-time enrichments happen after the early field filters; if a field needed for lookup is filtered out early, the enrichment will not run for those events. For example, if you filtered out events by a field that would have been aliased later, that alias never occurs.
+Practical consequences:
+Avoid using "search" to filter on computed or extracted fields (pre-v10 patterns like "| stats ... | search count>5" must be replaced with "| where count>5").
+Use eventstats/streamstats to retain per-event aggregates when you need to filter on them.
+Keep raw-field filters (index/source/sourcetype/host) explicit at the start to benefit from early volume reduction.
+Validate DMA/CIM impacts: early filters may remove events needed for data model acceleration or CIM mappings; re-run accelerations if necessary.
+Quick concrete before/after example using the query context
+
+Pre‑Splunk 10 (worked):
+index=cloud-aws sourcetype=aws:elb:accesslogs host="splunk-httpinput.health.mil"
+| rex "client=(?\w+)"
+| stats count BY client_id
+| search count>5
+
+Splunk 10 (correct):
+index=cloud-aws sourcetype=aws:elb:accesslogs host="splunk-httpinput.health.mil"
+| rex "client=(?\w+)"
+| stats count BY client_id
+| where count>5
+
+Summary
+
+Index-time processes remain responsible for initial field extraction, sourcetype assignment, timestamping, and linebreaking.
+Splunk 10 moves search-time field filters to the very start of the search pipeline — this improves performance but requires rewriting any searches that filtered on fields created later in the pipeline (use where/eventstats/streamstats, or compute via subsearches/tstats).
 
 
