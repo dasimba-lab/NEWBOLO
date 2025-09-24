@@ -284,4 +284,23 @@ Modified:
 | table count source sourcetype LatestEvent duration status
 
 
-
+###############################################################################################################################
+| tstats count latest(_time) AS recentTime WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" AND (sourcetype=aws:elb:accesslogs OR sourcetype=aws:audit:logs OR sourcetype=aws:cloudtrail OR sourcetype=aws:route53) BY source,sourcetype
+| eval age = now() - recentTime
+| eval max_age = case(
+sourcetype=="aws:elb:accesslogs", 900,
+sourcetype=="aws:audit:logs", 900,
+sourcetype=="aws:cloudtrail", 900,
+sourcetype=="aws:route53", 900,
+true(), 86400
+)
+| eval status = case(
+isnull(recentTime), "Missing",
+age > max_age, "Missing",
+true(), "OK"
+)
+| eval duration = if(status=="Missing", tostring(age,"duration"), "0s")
+| eval LatestEvent = coalesce(strftime(recentTime, "%Y-%m-%d %H:%M:%S"), "Never")
+| eval recentTime = coalesce(strftime(recentTime, "%+"), "Never")
+| eval kpi_value = if(status=="OK", 0, 1)
+| table count, source, sourcetype, status, duration, LatestEvent, recentTime, max_age, kpi_value
