@@ -1,0 +1,251 @@
+Below is the full SOP content (ready to paste into your Word doc) for DHA ITSI — step‑by‑step procedures, SPL examples, alert templates, checklists, escalation matrix, and runbook. I’ve used placeholders for sensitive values (replace before production).
+
+1.0 Document Control
+1.1 Title and Version  
+
+Title: SOP — Create ITSI Ad‑Hoc Service & Correlation Search (Alerts)
+Version: 1.0
+Date: [YYYY-MM-DD]
+1.2 Author and Contact Information  
+
+Author: [Your Name / Team]
+Contact: itops@example.mil | +1-301-000-0000
+1.3 Approval and Review Signatures  
+
+Approved by: [Name, Title] — Signature/Date
+Review cadence: Annual
+1.4 Revision History  
+
+v1.0 — Initial draft
+1.5 Distribution List  
+
+DHA ITSI Ops, SOC, Incident Response, DevOps
+2.0 Purpose and Scope
+2.1 Purpose  
+
+Provide a standard operating procedure for creating an ad‑hoc ITSI Service, mapping KPIs, building correlation searches to generate Notables, and configuring alert actions (email, webhook, Slack, PagerDuty).
+2.2 Scope and Applicability  
+
+Applies to DHA ITSI administrators, SOC engineers, and service owners responsible for monitoring and incident generation.
+2.3 Definitions and Acronyms  
+
+KPI: Key Performance Indicator
+Notable: ITSI notable event
+SLA: Service Level Agreement
+SPL: Search Processing Language
+3.0 Roles and Responsibilities
+3.1 Service Owner — defines runbook, acceptance criteria, and owner contact.
+3.2 ITSI Administrator — creates services, KPIs, correlation searches, and configures alert actions.
+3.3 SOC/On‑Call Team — responds to Notables, follows runbook and escalations.
+3.4 Incident Manager — coordinates incident handling and RCA.
+3.5 Stakeholders — business owners, application owners, and third-party contacts.
+
+4.0 Prerequisites and Preconditions
+4.1 Access & Permissions — ITSI admin role, access to Incident Review, Correlation Search creation rights.
+4.2 Integrations — SMTP, Slack webhook, PagerDuty integration configured (placeholders used).
+4.3 Naming Conventions — Service: Adhoc_Service_; KPI: Adhoc_KPI; Correlation: Adhoc_Corr_.
+4.4 Security — do not include PII in email bodies; use secure webhooks.
+
+5.0 Overview of Process
+5.1 Workflow: Define goal → Create Service → Create KPI (or saved search) → Create Correlation Search → Configure Alert Actions → Test → Monitor → Promote/Cleanup.
+5.2 Key metrics: count, recentTime, duration, status, kpi_value.
+
+6.0 Detailed SOP: Creating an ITSI Service
+6.1 Prepare runbook & details (before UI)
+
+Define monitoring goal, owner, runbook URL, cadence, aggregation keys, suppression policy, cleanup date.
+6.2 UI Steps to create Service
+
+ITSI → Configuration → Services → Create Service
+Name: Adhoc_Service__
+Type: Custom
+Owner: [owner@example.mil]
+Description: Purpose, cadence, cleanup date
+Runbook URL: [https://runbook.example.mil/...]
+Save
+6.3 Configure Service metadata
+
+Add tags, service level, and stakeholders.
+7.0 Detailed SOP: Creating KPIs
+7.1 Option A — From saved search (recommended)
+
+Create saved search in Settings → Searches, Reports, Alerts → New
+Saved search returns Entity, KPI value (0 OK, 1 problem), and relevant fields.
+In Service → Add KPI → Create from Saved Search → map fields → set Calculation Window (e.g., 15m) and Cadence (e.g., 1m).
+7.2 Option B — Create quick KPI saved search (SPL example)
+
+Example KPI SPL (Missing source within 15m):
+index=cloud-aws earliest=-15m host="splunk-httpinput.health.mil" (sourcetype="aws:elb:accesslogs" OR sourcetype="aws:audit:logs" OR sourcetype="aws:cloudtrail" OR sourcetype="aws:route53")
+| stats latest(_time) AS recentTime count BY source,sourcetype
+| eval age = now() - recentTime
+| eval kpi_value = if(isnull(recentTime) OR age>900, 1, 0)
+| where kpi_value==1
+| table source sourcetype kpi_value recentTime
+
+Save as Adhoc_KPI__
+
+7.3 KPI Configuration
+
+Map Entity field: source (or transaction_name), KPI Value: kpi_value, Timestamp: recentTime.
+Calculation window: 15 minutes; Cadence: 1 minute (adjust per SLA).
+8.0 Detailed SOP: Creating Correlation Searches & Notables
+8.1 Create Correlation Search
+
+ITSI → Configure → Correlation Searches → Create New
+Name: Adhoc_Corr__
+App/Owner: ITSI / ops@example.mil
+Description: Purpose, service mapping, runbook link
+8.2 Define Search
+
+Option 1: Reference saved KPI search (recommended)
+Option 2: Paste SPL directly: use the KPI SPL or tstats-based SPL (fast) below.
+8.3 Example tstats-based SPL (fast)
+| tstats count latest(_time) AS recentTime WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" AND (sourcetype="aws:elb:accesslogs" OR sourcetype="aws:audit:logs" OR sourcetype="aws:cloudtrail" OR sourcetype="aws:route53") BY source,sourcetype
+| eval age = now() - recentTime
+| eval max_age = case(sourcetype=="aws:elb:accesslogs",900, sourcetype=="aws:audit:logs",900, sourcetype=="aws:cloudtrail",900, sourcetype=="aws:route53",900, true(),86400)
+| eval status = case(isnull(recentTime),"Missing", age > max_age,"Missing", true(),"OK")
+| eval duration = if(status=="Missing", tostring(age,"duration"), "0s")
+| eval LatestEvent = if(isnull(recentTime),"Never",strftime(recentTime,"%Y-%m-%d %H:%M:%S"))
+| eval kpi_value = if(status=="OK",0,1)
+| where kpi_value==1
+| table source, sourcetype, status, duration, LatestEvent, recentTime, max_age, kpi_value
+
+8.4 Notable Mapping & Threshold
+
+Notable Condition: when kpi_value==1 OR status=="Missing"
+Map fields: source → result.source, sourcetype → result.sourcetype, duration, LatestEvent, kpi_value, max_age.
+8.5 Assign to Service and set Priority
+
+Service: Adhoc_Service__
+Severity: High (Missing), Medium (Warning), Low (OK)
+Owner: SOC team / Owner contact
+9.0 Alert Actions & Notification Configuration
+9.1 Create Notable (default) — required.
+
+9.2 Email Template (Replace placeholders)
+To: derrick@example.mil
+Subject: [ALERT] Adhoc_Service_ — Missing Data for $result.source$ / $result.sourcetype$
+Body:
+Alert: Adhoc_Service_ — Missing Data
+Source: $result.source$
+Sourcetype: $result.sourcetype$
+Status: $result.status$
+Duration: $result.duration$
+LatestEvent: $result.LatestEvent$
+Action: Follow runbook [runbook URL]. Escalate if unresolved after 30 minutes.
+
+9.3 Slack Webhook (JSON payload example)
+{
+  "text": "[ALERT] Adhoc_Service_ — Missing Data",
+  "attachments": [
+    {
+      "title": "$result.source$ / $result.sourcetype$",
+      "fields": [
+        {"title":"Status","value":"$result.status$","short":true},
+        {"title":"Duration","value":"$result.duration$","short":true},
+        {"title":"LatestEvent","value":"$result.LatestEvent$","short":false}
+      ],
+      "ts": "$result._time$"
+    }
+  ]
+}
+
+9.4 PagerDuty (example)
+
+Map notable severity to PagerDuty service key and urgency (high = P1). Use ITSI Alert Action integration.
+9.5 Run Script / Automation
+
+Optional: call remediation playbooks or ticket creation scripts. Provide path and parameters and test in staging.
+9.6 Throttling, Aggregation & Suppression
+
+Aggregate by: source + sourcetype
+Suppression window: 30 minutes (configurable)
+Escalation: if not acknowledged in 30 minutes → page on-call.
+10.0 Testing & Validation
+10.1 Test Plan
+
+Test Case 1: Trigger missing condition (simulate missing events) → verify Notable creation, email, Slack, PagerDuty.
+Test Case 2: Duplicate events within suppression window → verify no duplicate alerts.
+Test Case 3: Recovery (events resume) → verify auto-resolve or close notable as configured.
+10.2 Validation Checklist
+
+ Notable appears in Incident Review
+ Email delivered to derrick@example.mil
+ Slack message posted to #team-alerts
+ PagerDuty event created and routed
+ Aggregation key functioning
+ Throttle suppression working
+10.3 Troubleshooting
+
+No email: verify SMTP settings and mail server logs.
+Missing fields: confirm SPL returns mapped fields and correlation search maps correctly.
+No Slack: confirm webhook URL and connectivity.
+11.0 Monitoring, Tuning, & Maintenance
+11.1 Monitor for 24–72 hours, review false positives/negatives.
+11.2 Tune max_age, cadence, and suppression windows.
+11.3 If stable, promote to permanent service: rename, update runbook, and assign permanent owner.
+11.4 If temporary, schedule cleanup and export config before deletion.
+
+12.0 Incident Response & Escalation
+12.1 Incident Review: owner triages Notable, follows runbook, and logs actions.
+12.2 Escalation Matrix (example)
+
+T0 (Immediate): SOC Analyst / on-call
+T30 min: Incident Manager (pager)
+T60 min: Service Owner / App Owner
+T120 min: Major Incident Team / Leadership
+12.3 Post Incident Actions
+
+Create RCA, update runbook with lessons learned, and adjust thresholds.
+13.0 Documentation, Archiving & Audit
+13.1 Export correlation and KPI configs (UI → Export) and store in repo.
+13.2 Archive test results, emails, and runbook revisions.
+13.3 Keep audit logs for compliance (retention per DHA policy).
+
+14.0 Security & Privacy Considerations
+14.1 Do not include PII in alert content.
+14.2 Use secure channels for webhooks (HTTPS).
+14.3 Limit access to ITSI admin functions to required roles.
+
+15.0 Appendix
+15.1 Example SPLs (summary)
+
+KPI (event-search version):
+index=cloud-aws earliest=-15m host="splunk-httpinput.health.mil" (sourcetype="aws:cloudtrail" OR sourcetype="aws:audit:logs")
+| stats latest(_time) AS recentTime count BY source,sourcetype
+| eval age = now() - recentTime
+| eval kpi_value = if(isnull(recentTime) OR age>900, 1, 0)
+| where kpi_value==1
+| table source,sourcetype,kpi_value,recentTime
+
+tstats fast KPI:
+| tstats count latest(_time) AS recentTime WHERE index=cloud-aws AND host="splunk-httpinput.health.mil" AND (sourcetype="aws:elb:accesslogs" OR sourcetype="aws:cloudtrail") BY source,sourcetype
+| eval age = now() - recentTime
+| eval status = if(isnull(recentTime) OR age>900,"Missing","OK")
+| eval kpi_value = if(status=="OK",0,1)
+| where kpi_value==1
+| table source,sourcetype,status,age,recentTime
+
+15.2 Sample Runbook Template (brief)
+
+Service: Adhoc_Service_
+Owner: name/email
+Detection: KPI name & condition
+Immediate Steps: 1) Acknowledge notable 2) Check source host connectivity 3) Check ingestion pipeline 4) Contact app owner 5) Escalate if unresolved
+Recovery Steps: document fixes and confirm metrics restored
+15.3 One‑page Quick Checklist
+
+Create Service → Create KPI → Create Correlation Search → Map Notable Fields → Configure Alerts (Email/Slack/PagerDuty) → Test → Monitor → Promote/Cleanup
+15.4 Useful Links
+
+Splunk Docs: ITSI Correlation Searches
+Internal runbook repository: [placeholder]
+16.0 Approval & Signatures
+
+[Signature blocks]
+End of SOP content. Replace placeholders (emails, webhook URLs, PagerDuty keys) and adapt escalations and SLAs to DHA policies. When you’re ready, I’ll generate the Word .docx file with this content, formatted and styled for DHA TI SI (48–72 hour turnaround).
+
+Regenerate
+Copy
+Good response
+Bad response
