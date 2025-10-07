@@ -1,0 +1,27 @@
+Below are concise, non‑technical explanations you can give your boss for the two searches (what they do, why they exist, and what they show). Use this text in a brief report or email.
+
+Keester Stacking Issue search — purpose and behavior
+Purpose: finds log events from many network devices (switches/hosts) at the MAHG site that include the term "Stack" (i.e., stacking/system messages) so we can monitor stack‑related issues across the site.
+What it does: searches the linux-server index for events from the program source "Stack" (sourcetype pixisyslog) across a long list of hosts at the MAHG site, then filters and sorts results by source and timestamp. The query surfaces recent stacking system messages (errors, status changes) for each specified device.
+Why it’s useful: Stack issues (physical or logical stack failures) can cause connectivity loss or degraded service across multiple switch members. This search gives a focused view of all stack events so the ops team can quickly see where stacking problems are occurring and when.
+Output example: device name, event text, and time — allowing engineers to triage stacking faults and correlate with other alerts.
+Keesler Cluster Down Alerts search — purpose and behavior
+Purpose: detect and report cluster/service‑level failures at the MAHG site by looking for cluster‑related log messages that indicate remote clients are down.
+What it does: searches the linux server index for events from the CLUSTER program (sourcetype shown) on the MAHG hosts, looking for the phrase "Remote client CCEP down". It then sorts results by event time. The query surfaces recent cluster down messages so incident responders know which cluster nodes or remote clients are failing.
+Why it’s useful: Cluster outages or services reporting remote clients down can indicate broader service interruptions or degraded application availability. This search quickly identifies affected hosts and times so the incident team can begin troubleshooting (network, service, or client issues).
+Output example: host, timestamp, and the cluster error line — useful for creating notables/alerts or feeding incident tickets.
+Notes / Recommendations
+
+Host list cleanup: The Keester search includes many host name typos/quoting errors — clean up/standardize the host list (or use a lookup or tag) to avoid missed matches and simplify future maintenance.
+Use tstats or metadata where possible for performance when only needing last_event times or counts.
+Consider turning each search into a saved search with alerting (Notable/email) and a clear suppression/aggregation key (host) so the SOC gets timely notifications without noise.
+Add a readable table or dashboard showing host, event time, brief message, and status (OK/Warning/Critical) to aid rapid triage.
+If you’d like, I can:  
+
+Clean and optimize the Keester host list and provide a corrected SPL,
+Convert these into scheduled alerts with appropriate thresholds and escalation, or
+Build a simple dashboard that visualizes stacking and cluster‑down events.
+Regenerate
+Copy
+Good response
+Bad response
